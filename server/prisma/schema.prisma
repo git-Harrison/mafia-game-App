@@ -1,0 +1,81 @@
+// mafia-app 1단계 영속 스키마
+// 게스트 로그인 + 방/판/참가자 기록만. 캐릭터 꾸미기 모델은 3단계에서 추가.
+//
+// 참고: 진행 중 게임 상태(직업 배정, 페이즈, 집 배정, 투표, 채팅)는
+// 인메모리 RoomStore 에서만 다루고 DB 에는 저장하지 않는다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  POLICE
+  DOCTOR
+  MAFIA
+}
+
+enum Team {
+  CITIZEN
+  MAFIA
+}
+
+enum RoomStatus {
+  WAITING
+  IN_GAME
+  FINISHED
+}
+
+model User {
+  id            String       @id @default(cuid())
+  guestNickname String
+  // 개발용 봇 계정 표시 — production 에서는 항상 false (DevBotsService 가드).
+  // 자체 작성 정책: design-policy §2 hard-no 자가검증 통과 ("Bot" 은 장르 일반어).
+  isBot         Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+
+  hostedRooms   Room[]       @relation("RoomHost")
+  gamePlayers   GamePlayer[]
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  code       String     @unique
+  hostUserId String
+  status     RoomStatus @default(WAITING)
+  maxPlayers Int
+  settings   Json
+  createdAt  DateTime   @default(now())
+
+  host  User   @relation("RoomHost", fields: [hostUserId], references: [id])
+  games Game[]
+}
+
+model Game {
+  id         String   @id @default(cuid())
+  roomId     String
+  winnerTeam Team
+  startedAt  DateTime
+  endedAt    DateTime @default(now())
+
+  room    Room         @relation(fields: [roomId], references: [id])
+  players GamePlayer[]
+}
+
+model GamePlayer {
+  gameId     String
+  userId     String
+  role       Role
+  finalAlive Boolean
+  isWinner   Boolean
+
+  game Game @relation(fields: [gameId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([gameId, userId])
+}
